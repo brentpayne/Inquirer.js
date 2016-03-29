@@ -2,15 +2,15 @@
  * Password prompt example
  */
 
-"use strict";
-var inquirer = require("../lib/inquirer");
+'use strict';
+var inquirer = require('..');
 
 inquirer.prompt([
   {
-    type: "password",
-    message: "Enter your git password",
-    name: "password"
+    type: 'password',
+    message: 'Enter your git password',
+    name: 'password'
   }
-], function( answers ) {
-  console.log( JSON.stringify(answers, null, "  ") );
+]).then(function (answers) {
+  console.log(JSON.stringify(answers, null, '  '));
 });

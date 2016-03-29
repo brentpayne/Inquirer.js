@@ -2,29 +2,35 @@
  * List prompt example
  */
 
-"use strict";
-var inquirer = require("../lib/inquirer");
+'use strict';
+var inquirer = require('..');
 
 inquirer.prompt([
   {
-    type: "list",
-    name: "theme",
-    message: "What do you want to do?",
+    type: 'list',
+    name: 'theme',
+    message: 'What do you want to do?',
     choices: [
-      "Order a pizza",
-      "Make a reservation",
+      'Order a pizza',
+      'Make a reservation',
       new inquirer.Separator(),
-      "Ask opening hours",
-      "Talk to the receptionnist"
+      'Ask opening hours',
+      {
+        name: 'Contact support',
+        disabled: 'Unavailable at this time'
+      },
+      'Talk to the receptionnist'
     ]
   },
   {
-    type: "list",
-    name: "size",
-    message: "What size do you need",
-    choices: [ "Jumbo", "Large", "Standard", "Medium", "Small", "Micro" ],
-    filter: function( val ) { return val.toLowerCase(); }
+    type: 'list',
+    name: 'size',
+    message: 'What size do you need',
+    choices: ['Jumbo', 'Large', 'Standard', 'Medium', 'Small', 'Micro'],
+    filter: function (val) {
+      return val.toLowerCase();
+    }
   }
-], function( answers ) {
-    console.log( JSON.stringify(answers, null, "  ") );
-  });
+]).then(function (answers) {
+  console.log(JSON.stringify(answers, null, '  '));
+});

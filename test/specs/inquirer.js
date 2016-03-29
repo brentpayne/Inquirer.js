@@ -2,501 +2,532 @@
  * Inquirer public API test
  */
 
-var assert = require("assert");
-var expect = require("chai").expect;
-var sinon = require("sinon");
-var _ = require("lodash");
-var rx = require("rx-lite");
-var inquirer = require("../../lib/inquirer");
+var expect = require('chai').expect;
+var sinon = require('sinon');
+var _ = require('lodash');
+var rx = require('rx');
+var Promise = require('pinkie-promise');
+var inquirer = require('../../lib/inquirer');
+var autosubmit = require('../helpers/events').autosubmit;
 
-describe("inquirer.prompt", function() {
-
+describe('inquirer.prompt', function () {
   beforeEach(function () {
     this.prompt = inquirer.createPromptModule();
   });
 
-  it("should close and create a new readline instances each time it's called", function( done ) {
+  it('should close and create a new readline instances each time it\'s called', function () {
     var ctx = this;
     var rl1;
 
-    var prompt = this.prompt({
-      type: "confirm",
-      name: "q1",
-      message: "message"
-    }, function( answers ) {
-      expect(rl1.close.called).to.be.true;
-      expect(rl1.output.end.called).to.be.true;
-      expect(prompt.rl).to.not.exist;
-
-      var rl2;
-      var prompt2 = ctx.prompt({
-        type: "confirm",
-        name: "q1",
-        message: "message"
-      }, function( answers ) {
-        expect(rl2.close.called).to.be.true;
-        expect(rl2.output.end.called).to.be.true;
-        expect(prompt.rl).to.not.exist;
-
-        expect( rl1 ).to.not.equal( rl2 );
-        done();
-      });
-
-      rl2 = prompt2.rl;
-      prompt2.rl.emit("line");
+    var promise = this.prompt({
+      type: 'confirm',
+      name: 'q1',
+      message: 'message'
     });
 
-    rl1 = prompt.rl;
-    prompt.rl.emit("line");
+    rl1 = promise.ui.rl;
+    rl1.emit('line');
+
+    return promise.then(function () {
+      expect(rl1.close.called).to.be.true;
+      expect(rl1.output.end.called).to.be.true;
+
+      var rl2;
+      var promise2 = ctx.prompt({
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
+      });
+
+      rl2 = promise2.ui.rl;
+      rl2.emit('line');
+
+      return promise2.then(function () {
+        expect(rl2.close.called).to.be.true;
+        expect(rl2.output.end.called).to.be.true;
+
+        expect(rl1).to.not.equal(rl2);
+      });
+    });
   });
 
-  it("should take a prompts array and return answers", function( done ) {
+  it('should take a prompts array and return answers', function () {
     var prompts = [{
-      type: "confirm",
-      name: "q1",
-      message: "message"
+      type: 'confirm',
+      name: 'q1',
+      message: 'message'
     }, {
-      type: "confirm",
-      name: "q2",
-      message: "message",
+      type: 'confirm',
+      name: 'q2',
+      message: 'message',
       default: false
     }];
 
-    var ui = this.prompt( prompts, function( answers ) {
+    var promise = this.prompt(prompts);
+    autosubmit(promise.ui);
+
+    return promise.then(function (answers) {
       expect(answers.q1).to.be.true;
       expect(answers.q2).to.be.false;
-      done();
     });
-
-    ui.rl.emit("line");
-    ui.rl.emit("line");
   });
 
-  it("should take a single prompt and return answer", function( done ) {
+  it('should take a single prompt and return answer', function () {
     var prompt = {
-      type: "input",
-      name: "q1",
-      message: "message",
-      default: "bar"
+      type: 'input',
+      name: 'q1',
+      message: 'message',
+      default: 'bar'
     };
 
-    var ui = this.prompt( prompt, function( answers ) {
-      expect(answers.q1).to.equal("bar");
-      done();
-    });
+    var promise = this.prompt(prompt);
 
-    ui.rl.emit("line");
+    promise.ui.rl.emit('line');
+    return promise.then(function (answers) {
+      expect(answers.q1).to.equal('bar');
+    });
   });
 
-  it("should parse `message` if passed as a function", function( done ) {
-    var stubMessage = "foo";
-    this.prompt.registerPrompt("stub", function( params ) {
+  it('should parse `message` if passed as a function', function (done) {
+    var stubMessage = 'foo';
+    this.prompt.registerPrompt('stub', function (params) {
       this.opt = {
-        when: function() { return true; }
+        when: function () {
+          return true;
+        }
       };
-      this.run = _.noop;
+      this.run = sinon.stub().returns(Promise.resolve());
       expect(params.message).to.equal(stubMessage);
       done();
     });
 
     var prompts = [{
-      type: "input",
-      name: "name1",
-      message: "message",
-      default: "bar"
+      type: 'input',
+      name: 'name1',
+      message: 'message',
+      default: 'bar'
     }, {
-      type: "stub",
-      name: "name",
-      message: function( answers ) {
-        expect(answers.name1).to.equal("bar");
+      type: 'stub',
+      name: 'name',
+      message: function (answers) {
+        expect(answers.name1).to.equal('bar');
         return stubMessage;
       }
     }];
 
-    var ui = this.prompt(prompts, function() {});
-    ui.rl.emit("line");
+    var promise = this.prompt(prompts, function () {});
+    promise.ui.rl.emit('line');
   });
 
-  it("should run asynchronous `message`", function( done ) {
-    var stubMessage = "foo";
-    this.prompt.registerPrompt("stub", function( params ) {
+  it('should run asynchronous `message`', function (done) {
+    var stubMessage = 'foo';
+    this.prompt.registerPrompt('stub', function (params) {
       this.opt = {
-        when: function() { return true; }
+        when: function () {
+          return true;
+        }
       };
-      this.run = _.noop;
+      this.run = sinon.stub().returns(Promise.resolve());
       expect(params.message).to.equal(stubMessage);
       done();
     });
 
     var prompts = [{
-      type: "input",
-      name: "name1",
-      message: "message",
-      default: "bar"
+      type: 'input',
+      name: 'name1',
+      message: 'message',
+      default: 'bar'
     }, {
-      type: "stub",
-      name: "name",
-      message: function( answers ) {
-        expect(answers.name1).to.equal("bar");
+      type: 'stub',
+      name: 'name',
+      message: function (answers) {
+        expect(answers.name1).to.equal('bar');
         var goOn = this.async();
-        setTimeout(function() {
-          goOn(stubMessage);
-        }, 0 );
+        setTimeout(function () {
+          goOn(null, stubMessage);
+        }, 0);
       }
     }];
 
-    var ui = this.prompt(prompts, function() {});
-    ui.rl.emit("line");
+    var promise = this.prompt(prompts, function () {});
+    promise.ui.rl.emit('line');
   });
 
-  it("should parse `default` if passed as a function", function( done ) {
-    var stubDefault = "foo";
-    this.prompt.registerPrompt("stub", function( params ) {
+  it('should parse `default` if passed as a function', function (done) {
+    var stubDefault = 'foo';
+    this.prompt.registerPrompt('stub', function (params) {
       this.opt = {
-        when: function() { return true; }
+        when: function () {
+          return true;
+        }
       };
-      this.run = _.noop;
+      this.run = sinon.stub().returns(Promise.resolve());
       expect(params.default).to.equal(stubDefault);
       done();
     });
 
     var prompts = [{
-      type: "input",
-      name: "name1",
-      message: "message",
-      default: "bar"
+      type: 'input',
+      name: 'name1',
+      message: 'message',
+      default: 'bar'
     }, {
-      type: "stub",
-      name: "name",
-      message: "message",
-      default: function( answers ) {
-        expect(answers.name1).to.equal("bar");
+      type: 'stub',
+      name: 'name',
+      message: 'message',
+      default: function (answers) {
+        expect(answers.name1).to.equal('bar');
         return stubDefault;
       }
     }];
 
-    var ui = this.prompt(prompts, function() {});
-    ui.rl.emit("line");
+    var promise = this.prompt(prompts, function () {});
+    promise.ui.rl.emit('line');
   });
 
-  it("should run asynchronous `default`", function( done ) {
+  it('should run asynchronous `default`', function () {
     var goesInDefault = false;
-    var input2Default = "foo";
+    var input2Default = 'foo';
+    var promise;
     var prompts = [{
-      type: "input",
-      name: "name1",
-      message: "message",
-      default: "bar"
+      type: 'input',
+      name: 'name1',
+      message: 'message',
+      default: 'bar'
     }, {
-      type: "input2",
-      name: "q2",
-      message: "message",
-      default: function ( answers ) {
+      type: 'input2',
+      name: 'q2',
+      message: 'message',
+      default: function (answers) {
         goesInDefault = true;
-        expect(answers.name1).to.equal("bar");
+        expect(answers.name1).to.equal('bar');
         var goOn = this.async();
-        setTimeout(function() { goOn(input2Default); }, 0 );
-        setTimeout(function() {
-          ui.rl.emit("line");
-        }, 10 );
+        setTimeout(function () {
+          goOn(null, input2Default);
+        }, 0);
+        setTimeout(function () {
+          promise.ui.rl.emit('line');
+        }, 10);
       }
     }];
 
-    var ui = this.prompt( prompts, function( answers ) {
+    promise = this.prompt(prompts);
+    promise.ui.rl.emit('line');
+
+    return promise.then(function (answers) {
       expect(goesInDefault).to.be.true;
       expect(answers.q2).to.equal(input2Default);
-      done();
     });
-
-    ui.rl.emit("line");
   });
 
-  it("should pass previous answers to the prompt constructor", function( done ) {
-    this.prompt.registerPrompt("stub", function( params, rl, answers ) {
-      this.run = _.noop;
-      expect(answers.name1).to.equal("bar");
+  it('should pass previous answers to the prompt constructor', function (done) {
+    this.prompt.registerPrompt('stub', function (params, rl, answers) {
+      this.run = sinon.stub().returns(Promise.resolve());
+      expect(answers.name1).to.equal('bar');
       done();
     });
 
     var prompts = [{
-      type: "input",
-      name: "name1",
-      message: "message",
-      default: "bar"
+      type: 'input',
+      name: 'name1',
+      message: 'message',
+      default: 'bar'
     }, {
-      type: "stub",
-      name: "name",
-      message: "message"
+      type: 'stub',
+      name: 'name',
+      message: 'message'
     }];
 
-    var ui = this.prompt(prompts, function() {});
-    ui.rl.emit("line");
+    var promise = this.prompt(prompts);
+    promise.ui.rl.emit('line');
   });
 
-  it("should parse `choices` if passed as a function", function( done ) {
-    var stubChoices = [ "foo", "bar" ];
-    this.prompt.registerPrompt("stub", function( params ) {
-      this.run = _.noop;
+  it('should parse `choices` if passed as a function', function (done) {
+    var stubChoices = ['foo', 'bar'];
+    this.prompt.registerPrompt('stub', function (params) {
+      this.run = sinon.stub().returns(Promise.resolve());
       this.opt = {
-        when: function() { return true; }
+        when: function () {
+          return true;
+        }
       };
       expect(params.choices).to.equal(stubChoices);
       done();
     });
 
     var prompts = [{
-      type: "input",
-      name: "name1",
-      message: "message",
-      default: "bar"
+      type: 'input',
+      name: 'name1',
+      message: 'message',
+      default: 'bar'
     }, {
-      type: "stub",
-      name: "name",
-      message: "message",
-      choices: function( answers ) {
-        expect(answers.name1).to.equal("bar");
+      type: 'stub',
+      name: 'name',
+      message: 'message',
+      choices: function (answers) {
+        expect(answers.name1).to.equal('bar');
         return stubChoices;
       }
     }];
 
-    var ui = this.prompt(prompts, function() {});
-    ui.rl.emit("line");
+    var promise = this.prompt(prompts, function () {});
+    promise.ui.rl.emit('line');
   });
 
-  it("should expose the Reactive interface", function(done) {
-    var prompts = [{
-      type: "input",
-      name: "name1",
-      message: "message",
-      default: "bar"
-    }, {
-      type: "input",
-      name: "name",
-      message: "message",
-      default: "doe"
-    }];
+  it('should returns a promise', function (done) {
+    var prompt = {
+      type: 'input',
+      name: 'q1',
+      message: 'message',
+      default: 'bar'
+    };
 
-    var ui = this.prompt(prompts, function() {});
-    var spy = sinon.spy();
-    ui.process.subscribe( spy, function() {}, function() {
-      sinon.assert.calledWith( spy, { name: "name1", answer: "bar" });
-      sinon.assert.calledWith( spy, { name: "name", answer: "doe" });
+    var promise = this.prompt(prompt);
+    promise.then(function (answers) {
+      expect(answers.q1).to.equal('bar');
       done();
     });
-    ui.rl.emit("line");
-    ui.rl.emit("line");
+
+    promise.ui.rl.emit('line');
   });
 
-  it("takes an Observable as question", function( done ) {
-    var prompts = rx.Observable.create(function( obs ) {
+  it('should expose the Reactive interface', function (done) {
+    var prompts = [{
+      type: 'input',
+      name: 'name1',
+      message: 'message',
+      default: 'bar'
+    }, {
+      type: 'input',
+      name: 'name',
+      message: 'message',
+      default: 'doe'
+    }];
+
+    var promise = this.prompt(prompts);
+    var spy = sinon.spy();
+    promise.ui.process.subscribe(spy, function () {}, function () {
+      sinon.assert.calledWith(spy, {name: 'name1', answer: 'bar'});
+      sinon.assert.calledWith(spy, {name: 'name', answer: 'doe'});
+      done();
+    });
+
+    autosubmit(promise.ui);
+  });
+
+  it('should expose the UI', function (done) {
+    var promise = this.prompt([], function () {});
+    expect(promise.ui.answers).to.be.an('object');
+    done();
+  });
+
+  it('takes an Observable as question', function () {
+    var promise;
+    var prompts = rx.Observable.create(function (obs) {
       obs.onNext({
-        type: "confirm",
-        name: "q1",
-        message: "message"
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
       });
-      setTimeout(function() {
+      setTimeout(function () {
         obs.onNext({
-          type: "confirm",
-          name: "q2",
-          message: "message",
+          type: 'confirm',
+          name: 'q2',
+          message: 'message',
           default: false
         });
         obs.onCompleted();
-        ui.rl.emit("line");
-      }, 30 );
+        promise.ui.rl.emit('line');
+      }, 30);
     });
 
-    var ui = this.prompt( prompts, function( answers ) {
+    promise = this.prompt(prompts);
+    promise.ui.rl.emit('line');
+
+    return promise.then(function (answers) {
       expect(answers.q1).to.be.true;
       expect(answers.q2).to.be.false;
-      done();
     });
-
-    ui.rl.emit("line");
   });
 
-  describe("hierarchical mode (`when`)", function() {
-
-    it("should pass current answers to `when`", function( done ) {
+  describe('hierarchical mode (`when`)', function () {
+    it('should pass current answers to `when`', function () {
       var prompts = [{
-        type: "confirm",
-        name: "q1",
-        message: "message"
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
       }, {
-        name: "q2",
-        message: "message",
-        when: function( answers ) {
-          expect(answers).to.be.an("object");
+        name: 'q2',
+        message: 'message',
+        when: function (answers) {
+          expect(answers).to.be.an('object');
           expect(answers.q1).to.be.true;
         }
       }];
 
-      var ui = this.prompt( prompts, function( answers ) {
-        done();
-      });
+      var promise = this.prompt(prompts);
 
-      ui.rl.emit("line");
+      autosubmit(promise.ui);
+      return promise;
     });
 
-    it("should run prompt if `when` returns true", function( done ) {
+    it('should run prompt if `when` returns true', function () {
       var goesInWhen = false;
       var prompts = [{
-        type: "confirm",
-        name: "q1",
-        message: "message"
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
       }, {
-        type: "input",
-        name: "q2",
-        message: "message",
-        default: "bar-var",
-        when: function() {
+        type: 'input',
+        name: 'q2',
+        message: 'message',
+        default: 'bar-var',
+        when: function () {
           goesInWhen = true;
           return true;
         }
       }];
 
-      var ui = this.prompt( prompts, function( answers ) {
-        expect(goesInWhen).to.be.true;
-        expect(answers.q2).to.equal("bar-var");
-        done();
-      });
+      var promise = this.prompt(prompts);
+      autosubmit(promise.ui);
 
-      ui.rl.emit("line");
-      ui.rl.emit("line");
+      return promise.then(function (answers) {
+        expect(goesInWhen).to.be.true;
+        expect(answers.q2).to.equal('bar-var');
+      });
     });
 
-    it("should run prompt if `when` is true", function( done ) {
+    it('should run prompt if `when` is true', function () {
       var prompts = [{
-        type: "confirm",
-        name: "q1",
-        message: "message"
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
       }, {
-        type: "input",
-        name: "q2",
-        message: "message",
-        default: "bar-var",
+        type: 'input',
+        name: 'q2',
+        message: 'message',
+        default: 'bar-var',
         when: true
       }];
 
-      var ui = this.prompt( prompts, function( answers ) {
-        expect(answers.q2).to.equal("bar-var");
-        done();
-      });
+      var promise = this.prompt(prompts);
+      autosubmit(promise.ui);
 
-      ui.rl.emit("line");
-      ui.rl.emit("line");
+      return promise.then(function (answers) {
+        expect(answers.q2).to.equal('bar-var');
+      });
     });
 
-    it("should not run prompt if `when` returns false", function( done ) {
+    it('should not run prompt if `when` returns false', function () {
       var goesInWhen = false;
       var prompts = [{
-        type: "confirm",
-        name: "q1",
-        message: "message"
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
       }, {
-        type: "confirm",
-        name: "q2",
-        message: "message",
-        when: function() {
+        type: 'confirm',
+        name: 'q2',
+        message: 'message',
+        when: function () {
           goesInWhen = true;
           return false;
         }
       }, {
-        type: "input",
-        name: "q3",
-        message: "message",
-        default: "foo"
+        type: 'input',
+        name: 'q3',
+        message: 'message',
+        default: 'foo'
       }];
 
-      var ui = this.prompt( prompts, function( answers ) {
+      var promise = this.prompt(prompts);
+      autosubmit(promise.ui);
+
+      return promise.then(function (answers) {
         expect(goesInWhen).to.be.true;
         expect(answers.q2).to.not.exist;
-        expect(answers.q3).to.equal("foo");
+        expect(answers.q3).to.equal('foo');
         expect(answers.q1).to.be.true;
-        done();
       });
-
-      ui.rl.emit("line");
-      ui.rl.emit("line");
     });
 
-    it("should not run prompt if `when` is false", function( done ) {
+    it('should not run prompt if `when` is false', function () {
       var prompts = [{
-        type: "confirm",
-        name: "q1",
-        message: "message"
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
       }, {
-        type: "confirm",
-        name: "q2",
-        message: "message",
+        type: 'confirm',
+        name: 'q2',
+        message: 'message',
         when: false
       }, {
-        type: "input",
-        name: "q3",
-        message: "message",
-        default: "foo"
+        type: 'input',
+        name: 'q3',
+        message: 'message',
+        default: 'foo'
       }];
 
-      var ui = this.prompt( prompts, function( answers ) {
-        expect(answers.q2).to.not.exist;
-        expect(answers.q3).to.equal("foo");
-        expect(answers.q1).to.be.true;
-        done();
-      });
+      var promise = this.prompt(prompts);
+      autosubmit(promise.ui);
 
-      ui.rl.emit("line");
-      ui.rl.emit("line");
+      return promise.then(function (answers) {
+        expect(answers.q2).to.not.exist;
+        expect(answers.q3).to.equal('foo');
+        expect(answers.q1).to.be.true;
+      });
     });
 
-    it("should run asynchronous `when`", function( done ) {
+    it('should run asynchronous `when`', function () {
+      var promise;
       var goesInWhen = false;
       var prompts = [{
-        type: "confirm",
-        name: "q1",
-        message: "message"
+        type: 'confirm',
+        name: 'q1',
+        message: 'message'
       }, {
-        type: "input",
-        name: "q2",
-        message: "message",
-        default: "foo-bar",
-        when: function() {
+        type: 'input',
+        name: 'q2',
+        message: 'message',
+        default: 'foo-bar',
+        when: function () {
           goesInWhen = true;
           var goOn = this.async();
-          setTimeout(function() { goOn(true); }, 0 );
-          setTimeout(function() {
-            ui.rl.emit("line");
-          }, 10 );
+          setTimeout(function () {
+            goOn(null, true);
+          }, 0);
+          setTimeout(function () {
+            promise.ui.rl.emit('line');
+          }, 10);
         }
       }];
 
-      var ui = this.prompt( prompts, function( answers ) {
+      promise = this.prompt(prompts);
+      autosubmit(promise.ui);
+
+      return promise.then(function (answers) {
         expect(goesInWhen).to.be.true;
-        expect(answers.q2).to.equal("foo-bar");
-        done();
+        expect(answers.q2).to.equal('foo-bar');
       });
-
-      ui.rl.emit("line");
     });
-
   });
 
-  describe("#registerPrompt()", function() {
-    it("register new prompt types", function( done ) {
-      var questions = [{ type: "foo", message: "something" }];
-      inquirer.registerPrompt("foo", function( question, rl, answers ) {
+  describe('#registerPrompt()', function () {
+    it('register new prompt types', function (done) {
+      var questions = [{type: 'foo', message: 'something'}];
+      inquirer.registerPrompt('foo', function (question, rl, answers) {
         expect(question).to.eql(questions[0]);
         expect(answers).to.eql({});
-        this.run = _.noop;
+        this.run = sinon.stub().returns(Promise.resolve());
         done();
       });
 
       inquirer.prompt(questions, _.noop);
     });
 
-    it("overwrite default prompt types", function( done ) {
-      var questions = [{ type: "confirm", message: "something" }];
-      inquirer.registerPrompt("confirm", function( question, rl, answers ) {
-        this.run = _.noop;
+    it('overwrite default prompt types', function (done) {
+      var questions = [{type: 'confirm', message: 'something'}];
+      inquirer.registerPrompt('confirm', function () {
+        this.run = sinon.stub().returns(Promise.resolve());
         done();
       });
 
@@ -505,17 +536,17 @@ describe("inquirer.prompt", function() {
     });
   });
 
-  describe("#restoreDefaultPrompts()", function() {
-    it("restore default prompts", function() {
-      var ConfirmPrompt = inquirer.prompt.prompts["confirm"];
-      inquirer.registerPrompt("confirm", _.noop);
+  describe('#restoreDefaultPrompts()', function () {
+    it('restore default prompts', function () {
+      var ConfirmPrompt = inquirer.prompt.prompts.confirm;
+      inquirer.registerPrompt('confirm', _.noop);
       inquirer.restoreDefaultPrompts();
-      expect(ConfirmPrompt).to.equal(inquirer.prompt.prompts["confirm"]);
+      expect(ConfirmPrompt).to.equal(inquirer.prompt.prompts.confirm);
     });
   });
 
   // see: https://github.com/SBoudrias/Inquirer.js/pull/326
-  it('does not throw exception if cli-width reports width of 0', function (done) {
+  it('does not throw exception if cli-width reports width of 0', function () {
     var original = process.stdout.getWindowSize;
     process.stdout.getWindowSize = function () {
       return [0];
@@ -523,18 +554,17 @@ describe("inquirer.prompt", function() {
     var prompt = inquirer.createPromptModule();
 
     var prompts = [{
-      type: "confirm",
-      name: "q1",
-      message: "message"
+      type: 'confirm',
+      name: 'q1',
+      message: 'message'
     }];
 
-    var ui = prompt( prompts, function( answers ) {
+    var promise = prompt(prompts);
+    promise.ui.rl.emit('line');
+
+    return promise.then(function (answers) {
       process.stdout.getWindowSize = original;
       expect(answers.q1).to.equal(true);
-      done();
     });
-
-    ui.rl.emit("line");
   });
-
 });
